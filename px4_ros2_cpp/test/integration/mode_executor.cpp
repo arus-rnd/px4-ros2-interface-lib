@@ -3,17 +3,15 @@
  * SPDX-License-Identifier: BSD-3-Clause
  ****************************************************************************/
 
-#include <gtest/gtest.h>
-
 #include "util.hpp"
 
+#include <Eigen/Core>
 #include <px4_ros2/components/mode_executor.hpp>
 #include <px4_ros2/components/wait_for_fmu.hpp>
 #include <px4_ros2/control/setpoint_types/experimental/trajectory.hpp>
-
 #include <rclcpp/rclcpp.hpp>
 
-#include <Eigen/Core>
+#include <gtest/gtest.h>
 
 using namespace std::chrono_literals;
 
@@ -25,8 +23,7 @@ namespace mode_executor_tests
 class FlightModeTest : public px4_ros2::ModeBase
 {
 public:
-  explicit FlightModeTest(rclcpp::Node & node)
-  : ModeBase(node, Settings{kName, false})
+  explicit FlightModeTest(rclcpp::Node & node) : ModeBase(node, Settings{kName, false})
   {
     _trajectory_setpoint = std::make_shared<px4_ros2::TrajectorySetpointType>(*this);
   }
@@ -44,10 +41,7 @@ public:
     ++num_arming_check_updates;
   }
 
-  void onDeactivate() override
-  {
-    ++num_deactivations;
-  }
+  void onDeactivate() override { ++num_deactivations; }
 
   void updateSetpoint(float dt_s) override
   {
@@ -63,7 +57,8 @@ public:
     // Send some random setpoints
     const float elapsed_s = (now - _activation_time).seconds();
     const Eigen::Vector3f velocity{5.f, elapsed_s, 0.f};
-    _trajectory_setpoint->update(velocity);
+
+    _trajectory_setpoint->update({NAN, NAN, NAN}, velocity, {NAN, NAN, NAN});
   }
 
   int num_activations{0};
@@ -80,14 +75,17 @@ class ModeExecutorTest : public px4_ros2::ModeExecutorBase
 {
 public:
   ModeExecutorTest(rclcpp::Node & node, FlightModeTest & owned_mode, bool activate_immediately)
-  : ModeExecutorBase(node,
-      ModeExecutorBase::Settings{activate_immediately ? Settings::Activation::ActivateImmediately : Settings::Activation::ActivateOnlyWhenArmed},
+  : ModeExecutorBase(
+      node,
+      ModeExecutorBase::Settings{
+        activate_immediately ? Settings::Activation::ActivateImmediately
+                             : Settings::Activation::ActivateOnlyWhenArmed},
       owned_mode),
     _node(node)
-  {}
-
-  enum class State
   {
+  }
+
+  enum class State {
     Reset = 0,
     WaitForArming = 1,
     Arming = 2,
@@ -104,10 +102,7 @@ public:
     runState(State::WaitForArming, px4_ros2::Result::Success);
   }
 
-  void onDeactivate(DeactivateReason reason) override
-  {
-    ++num_deactivations;
-  }
+  void onDeactivate(DeactivateReason reason) override { ++num_deactivations; }
 
   void runState(State state, px4_ros2::Result previous_result)
   {
@@ -127,30 +122,28 @@ public:
         break;
 
       case State::WaitForArming:
-        waitReadyToArm([this](px4_ros2::Result result) {runState(State::Arming, result);});
+        waitReadyToArm([this](px4_ros2::Result result) { runState(State::Arming, result); });
         break;
 
       case State::Arming:
-        arm([this](px4_ros2::Result result) {runState(State::TakingOff, result);});
+        arm([this](px4_ros2::Result result) { runState(State::TakingOff, result); });
         break;
 
       case State::TakingOff:
-        takeoff([this](px4_ros2::Result result) {runState(State::MyMode, result);});
+        takeoff([this](px4_ros2::Result result) { runState(State::MyMode, result); });
         break;
 
       case State::MyMode:
         scheduleMode(
-          ownedMode().id(), [this](px4_ros2::Result result) {
-            runState(State::RTL, result);
-          });
+          ownedMode().id(), [this](px4_ros2::Result result) { runState(State::RTL, result); });
         break;
 
       case State::RTL:
-        rtl([this](px4_ros2::Result result) {runState(State::WaitUntilDisarmed, result);});
+        rtl([this](px4_ros2::Result result) { runState(State::WaitUntilDisarmed, result); });
         break;
 
       case State::WaitUntilDisarmed:
-        waitUntilDisarmed([this](px4_ros2::Result result) {runState(State::Completed, result);});
+        waitUntilDisarmed([this](px4_ros2::Result result) { runState(State::Completed, result); });
         break;
 
       case State::Completed:
@@ -170,12 +163,10 @@ private:
   rclcpp::Node & _node;
 };
 
-
 class TestExecutionAutonomous
 {
 public:
-  explicit TestExecutionAutonomous(rclcpp::Node & node)
-  : _node(node) {}
+  explicit TestExecutionAutonomous(rclcpp::Node & node) : _node(node) {}
 
   void run();
 
@@ -189,29 +180,27 @@ private:
 
 void TestExecutionAutonomous::run()
 {
-  _test_timeout = _node.create_wall_timer(
-    120s, [] {
-      EXPECT_TRUE(false) << "Timeout";
-      rclcpp::shutdown();
-    });
+  _test_timeout = _node.create_wall_timer(120s, [] {
+    EXPECT_TRUE(false) << "Timeout";
+    rclcpp::shutdown();
+  });
 
   _mode = std::make_unique<FlightModeTest>(_node);
   _mode_executor = std::make_unique<ModeExecutorTest>(_node, *_mode, true);
 
-
   // The executor is expected to be activated and then run through its states (successfully)
 
   _mode_executor->on_completed = [this]() {
-      EXPECT_EQ(_mode_executor->num_activations, 1);
-      EXPECT_EQ(_mode_executor->num_deactivations, 0);
-      EXPECT_EQ(_mode->num_activations, 1);
-      EXPECT_EQ(_mode->num_deactivations, 1);
-      EXPECT_GT(_mode->num_setpoint_updates, 1);
-      EXPECT_GT(_mode->num_arming_check_updates, 1);
-    };
+    EXPECT_EQ(_mode_executor->num_activations, 1);
+    EXPECT_EQ(_mode_executor->num_deactivations, 0);
+    EXPECT_EQ(_mode->num_activations, 1);
+    EXPECT_EQ(_mode->num_deactivations, 1);
+    EXPECT_GT(_mode->num_setpoint_updates, 1);
+    EXPECT_GT(_mode->num_arming_check_updates, 1);
+  };
   _mode_executor->on_state_completed = [](ModeExecutorTest::State, px4_ros2::Result result) {
-      EXPECT_EQ(result, px4_ros2::Result::Success);
-    };
+    EXPECT_EQ(result, px4_ros2::Result::Success);
+  };
 
   ASSERT_TRUE(_mode_executor->doRegister());
 }
@@ -225,18 +214,15 @@ TEST_F(ModesTest, runExecutorAutonomous)
   rclcpp::spin(test_node);
 }
 
-
 class TestExecutionInCharge
 {
 public:
-  explicit TestExecutionInCharge(rclcpp::Node & node)
-  : _node(node), _vehicle_state(node) {}
+  explicit TestExecutionInCharge(rclcpp::Node & node) : _node(node), _vehicle_state(node) {}
 
   void run();
 
 private:
-  enum class State
-  {
+  enum class State {
     WaitForArming,
     TryToArm,
     SwitchMode,
@@ -260,15 +246,13 @@ private:
 
 void TestExecutionInCharge::run()
 {
-  _test_timeout = _node.create_wall_timer(
-    80s, [] {
-      EXPECT_TRUE(false) << "Timeout";
-      rclcpp::shutdown();
-    });
+  _test_timeout = _node.create_wall_timer(80s, [] {
+    EXPECT_TRUE(false) << "Timeout";
+    rclcpp::shutdown();
+  });
 
   _mode = std::make_unique<FlightModeTest>(_node);
   _mode_executor = std::make_unique<ModeExecutorTest>(_node, *_mode, false);
-
 
   // Testing steps:
   // - Wait until we can arm
@@ -287,46 +271,39 @@ void TestExecutionInCharge::run()
         if (msg->pre_flight_checks_pass) {
           RCLCPP_INFO(_node.get_logger(), "Arming possible");
           _state = State::TryToArm;
-          _mode_executor->arm(
-            [this](px4_ros2::Result result) {
-              ASSERT_EQ(result, px4_ros2::Result::Rejected);
-              RCLCPP_INFO(_node.get_logger(), "Arming rejected, switching mode");
-              _state = State::SwitchMode;
-              _vehicle_state.sendCommand(
-                px4_msgs::msg::VehicleCommand::VEHICLE_CMD_SET_NAV_STATE,
-                _mode->id());
+          _mode_executor->arm([this](px4_ros2::Result result) {
+            ASSERT_EQ(result, px4_ros2::Result::Rejected);
+            RCLCPP_INFO(_node.get_logger(), "Arming rejected, switching mode");
+            _state = State::SwitchMode;
+            _vehicle_state.sendCommand(
+              px4_msgs::msg::VehicleCommand::VEHICLE_CMD_SET_NAV_STATE, _mode->id());
 
-              _vehicle_state.callbackOnModeSet(
-                [this]() {
-                  RCLCPP_INFO(_node.get_logger(), "Mode Activated, arming");
-                  _state = State::Arming;
-                  _mode_executor->arm(
-                    [this](px4_ros2::Result result) {
-                      ASSERT_EQ(result, px4_ros2::Result::Success);
-                      RCLCPP_INFO(_node.get_logger(), "Armed");
+            _vehicle_state.callbackOnModeSet(
+              [this]() {
+                RCLCPP_INFO(_node.get_logger(), "Mode Activated, arming");
+                _state = State::Arming;
+                _mode_executor->arm([this](px4_ros2::Result result) {
+                  ASSERT_EQ(result, px4_ros2::Result::Success);
+                  RCLCPP_INFO(_node.get_logger(), "Armed");
 
-                      // Now the executor must take over and trigger a takeoff
-                      _state = State::WaitForTakeoff;
-                      _vehicle_state.callbackOnModeSet(
-                        [this]() {
-                          RCLCPP_INFO(
-                            _node.get_logger(),
-                            "Takeoff Activated, switching to owned mode");
-                          _vehicle_state.sendCommand(
-                            px4_msgs::msg::VehicleCommand::
-                            VEHICLE_CMD_SET_NAV_STATE, _mode->id());
-                          _state = State::WaitForRTL;
-
-                        }, px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_TAKEOFF);
-
-                    });
-                }, _mode->id());
-            });
+                  // Now the executor must take over and trigger a takeoff
+                  _state = State::WaitForTakeoff;
+                  _vehicle_state.callbackOnModeSet(
+                    [this]() {
+                      RCLCPP_INFO(_node.get_logger(), "Takeoff Activated, switching to owned mode");
+                      _vehicle_state.sendCommand(
+                        px4_msgs::msg::VehicleCommand::VEHICLE_CMD_SET_NAV_STATE, _mode->id());
+                      _state = State::WaitForRTL;
+                    },
+                    px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_TAKEOFF);
+                });
+              },
+              _mode->id());
+          });
         }
       }
 
       if (_was_armed && !armed && _state == State::WaitForDisarm) {
-
         // Disarming, complete the test
         EXPECT_TRUE(_land_activated);
 
@@ -343,19 +320,18 @@ void TestExecutionInCharge::run()
       _was_armed = armed;
     });
 
-
   _mode_executor->on_completed = []() {
-      EXPECT_FALSE(true);           // never completed
-    };
+    EXPECT_FALSE(true);  // never completed
+  };
   _mode_executor->on_state_completed =
     [this](ModeExecutorTest::State next_state, px4_ros2::Result result) {
-
       if (_state == State::WaitForRTL && next_state == ModeExecutorTest::State::RTL) {
         EXPECT_EQ(result, px4_ros2::Result::Success);
         EXPECT_EQ(_mode_executor->num_activations, 2);
         EXPECT_EQ(_mode_executor->num_deactivations, 1);
 
-        // Wait until RTL actually activated (otherwise we can have a race condition with the previous command from the executor)
+        // Wait until RTL actually activated (otherwise we can have a race condition with the
+        // previous command from the executor)
         _vehicle_state.callbackOnModeSet(
           [this]() {
             RCLCPP_INFO(_node.get_logger(), "Activating Land");
@@ -366,10 +342,12 @@ void TestExecutionInCharge::run()
               [this]() {
                 RCLCPP_INFO(_node.get_logger(), "Landing activated");
                 _land_activated = true;
-              }, px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_DESCEND);
+              },
+              px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_DESCEND);
 
             _state = State::WaitForDisarm;
-          }, px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_RTL);
+          },
+          px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_RTL);
 
       } else if (_state == State::WaitForRTL && next_state == ModeExecutorTest::State::MyMode) {
         // We can get here twice, when switching into the owned mode and after re-activation
@@ -377,7 +355,7 @@ void TestExecutionInCharge::run()
       } else if (_state == State::WaitForDisarm) {
         EXPECT_TRUE(
           result == px4_ros2::Result::Deactivated ||
-          result == px4_ros2::Result::Rejected);                                                                      // Switching to land deactivated the executor
+          result == px4_ros2::Result::Rejected);  // Switching to land deactivated the executor
 
       } else {
         EXPECT_EQ(result, px4_ros2::Result::Success);
@@ -399,8 +377,7 @@ TEST_F(ModesTest, runExecutorInCharge)
 class TestExecutionFailsafe
 {
 public:
-  explicit TestExecutionFailsafe(rclcpp::Node & node)
-  : _node(node), _vehicle_state(node) {}
+  explicit TestExecutionFailsafe(rclcpp::Node & node) : _node(node), _vehicle_state(node) {}
 
   void run();
 
@@ -418,56 +395,54 @@ private:
 
 void TestExecutionFailsafe::run()
 {
-  _test_timeout = _node.create_wall_timer(
-    120s, [] {
-      EXPECT_TRUE(false) << "Timeout";
-      rclcpp::shutdown();
-    });
+  _test_timeout = _node.create_wall_timer(120s, [] {
+    EXPECT_TRUE(false) << "Timeout";
+    rclcpp::shutdown();
+  });
 
   _mode = std::make_unique<FlightModeTest>(_node);
   _mode_executor = std::make_unique<ModeExecutorTest>(_node, *_mode, true);
 
-
   // Run the executor and trigger a failsafe (descend) while it's in the custom mode
 
   _mode_executor->on_completed = []() {
-      EXPECT_FALSE(true);           // never completed
-    };
-  _mode_executor->on_state_completed =
-    [this](ModeExecutorTest::State next_state, px4_ros2::Result result) {
+    EXPECT_FALSE(true);  // never completed
+  };
+  _mode_executor->on_state_completed = [this](
+                                         ModeExecutorTest::State next_state,
+                                         px4_ros2::Result result) {
+    if (next_state == ModeExecutorTest::State::TakingOff) {
+      _vehicle_state.callbackOnModeSet(
+        [this]() {
+          RCLCPP_INFO(_node.get_logger(), "Owned mode started, triggering failsafe");
+          _vehicle_state.setGPSFailure(true);
+          _failsafe_triggered = true;
+        },
+        _mode->id());
 
-      if (next_state == ModeExecutorTest::State::TakingOff) {
+      EXPECT_EQ(result, px4_ros2::Result::Success);
 
-        _vehicle_state.callbackOnModeSet(
-          [this]() {
-            RCLCPP_INFO(_node.get_logger(), "Owned mode started, triggering failsafe");
-            _vehicle_state.setGPSFailure(true);
-            _failsafe_triggered = true;
-          }, _mode->id());
+    } else if (next_state == ModeExecutorTest::State::RTL) {
+      EXPECT_EQ(
+        result, px4_ros2::Result::Deactivated);  // Expect the failsafe to have triggered in MyMode
 
-        EXPECT_EQ(result, px4_ros2::Result::Success);
+      _vehicle_state.callbackOnModeSet(
+        [this]() {
+          RCLCPP_INFO(_node.get_logger(), "Landing activated");
+          _land_activated = true;
+        },
+        px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_DESCEND);
 
-      } else if (next_state == ModeExecutorTest::State::RTL) {
-        EXPECT_EQ(result, px4_ros2::Result::Deactivated);                 // Expect the failsafe to have triggered in MyMode
-
-        _vehicle_state.callbackOnModeSet(
-          [this]() {
-            RCLCPP_INFO(_node.get_logger(), "Landing activated");
-            _land_activated = true;
-          }, px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_DESCEND);
-
-
-      } else {
-        EXPECT_EQ(result, px4_ros2::Result::Success);
-      }
-    };
+    } else {
+      EXPECT_EQ(result, px4_ros2::Result::Success);
+    }
+  };
 
   _vehicle_state.setOnVehicleStatusUpdate(
     [this](const px4_msgs::msg::VehicleStatus::UniquePtr & msg) {
       const bool armed = msg->arming_state == px4_msgs::msg::VehicleStatus::ARMING_STATE_ARMED;
 
       if (_was_armed && !armed) {
-
         _vehicle_state.setGPSFailure(false);
 
         // Disarming, complete the test
@@ -498,4 +473,4 @@ TEST_F(ModesTest, runExecutorFailsafe)
   test_execution.run();
   rclcpp::spin(test_node);
 }
-} // namespace mode_executor_tests
+}  // namespace mode_executor_tests

@@ -46,7 +46,7 @@ public:
     }
 
     const Eigen::Vector3f velocity{0.f, 1.f, 5.f};
-    _trajectory_setpoint->update(velocity);
+    _trajectory_setpoint->update({NAN,NAN,NAN},velocity, {NAN,NAN,NAN}, std::nullopt, std::nullopt);
   }
 
 private:
