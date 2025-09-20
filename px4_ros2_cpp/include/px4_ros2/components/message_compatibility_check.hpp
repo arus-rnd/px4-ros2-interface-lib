@@ -17,6 +17,8 @@ using namespace std::chrono_literals; // NOLINT
   {"fmu/in/config_control_setpoints", "VehicleControlMode"}, \
   {"fmu/in/config_overrides_request", "ConfigOverrides"}, \
   {"fmu/in/goto_setpoint"}, \
+  {"fmu/in/lateral_control_configuration"}, \
+  {"fmu/in/longitudinal_control_configuration"}, \
   {"fmu/in/mode_completed"}, \
   {"fmu/in/register_ext_component_request"}, \
   {"fmu/in/trajectory_setpoint"}, \
@@ -26,6 +28,7 @@ using namespace std::chrono_literals; // NOLINT
   {"fmu/in/vehicle_command_mode_executor", "VehicleCommand"}, \
   {"fmu/in/vehicle_rates_setpoint"}, \
   {"fmu/in/vehicle_visual_odometry", "VehicleOdometry"}, \
+  {"fmu/out/airspeed_validated"}, \
   {"fmu/out/arming_check_request"}, \
   {"fmu/out/battery_status"}, \
   {"fmu/out/home_position"}, \
