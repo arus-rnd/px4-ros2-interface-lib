@@ -17,8 +17,6 @@ using namespace std::chrono_literals; // NOLINT
   {"fmu/in/config_control_setpoints", "VehicleControlMode"}, \
   {"fmu/in/config_overrides_request", "ConfigOverrides"}, \
   {"fmu/in/goto_setpoint"}, \
-  {"fmu/in/lateral_control_configuration"}, \
-  {"fmu/in/longitudinal_control_configuration"}, \
   {"fmu/in/mode_completed"}, \
   {"fmu/in/register_ext_component_request"}, \
   {"fmu/in/trajectory_setpoint"}, \
