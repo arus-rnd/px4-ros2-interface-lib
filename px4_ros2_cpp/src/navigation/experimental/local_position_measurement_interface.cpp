@@ -55,6 +55,7 @@ void LocalPositionMeasurementInterface::update(
 
   aux_local_position.timestamp_sample = local_position_measurement.timestamp_sample.nanoseconds() *
     1e-3;
+  aux_local_position.timestamp = local_position_measurement.timestamp_sample.nanoseconds() * 1e-3;
 
   // Position
   aux_local_position.pose_frame = _pose_frame;
